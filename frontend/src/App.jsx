@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import "./App.css";
 
+const API_URL = "http://localhost:8080/api";
+
 function App() {
   const [stats, setStats] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
-
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -34,16 +36,32 @@ function App() {
     userId: "",
   });
 
+  const [searchText, setSearchText] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
+  const [userFilter, setUserFilter] = useState("");
+  const [activePage, setActivePage] = useState("tasks");
+  const [newProject, setNewProject] = useState({
+    name: "",
+    description: "",
+  });
+
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    role: "DEVELOPER",
+  });
+
   useEffect(() => {
     fetchAllData();
   }, []);
 
   const fetchAllData = () => {
     Promise.all([
-      axios.get("http://localhost:8080/api/dashboard/stats"),
-      axios.get("http://localhost:8080/api/tasks"),
-      axios.get("http://localhost:8080/api/projects"),
-      axios.get("http://localhost:8080/api/users"),
+      axios.get(`${API_URL}/dashboard/stats`),
+      axios.get(`${API_URL}/tasks`),
+      axios.get(`${API_URL}/projects`),
+      axios.get(`${API_URL}/users`),
     ]).then(([statsRes, tasksRes, projectsRes, usersRes]) => {
       setStats(statsRes.data);
       setTasks(tasksRes.data);
@@ -54,11 +72,22 @@ function App() {
 
   const refreshTasksAndStats = () => {
     Promise.all([
-      axios.get("http://localhost:8080/api/tasks"),
-      axios.get("http://localhost:8080/api/dashboard/stats"),
+      axios.get(`${API_URL}/tasks`),
+      axios.get(`${API_URL}/dashboard/stats`),
     ]).then(([tasksRes, statsRes]) => {
       setTasks(tasksRes.data);
       setStats(statsRes.data);
+    });
+  };
+
+  const resetNewTask = () => {
+    setNewTask({
+      title: "",
+      description: "",
+      status: "TODO",
+      priority: "",
+      projectId: "",
+      assignedUserId: "",
     });
   };
 
@@ -75,28 +104,17 @@ function App() {
       return;
     }
 
-    axios.post("http://localhost:8080/api/tasks", newTask).then(() => {
+    axios.post(`${API_URL}/tasks`, newTask).then(() => {
       refreshTasksAndStats();
-
-      setNewTask({
-        title: "",
-        description: "",
-        status: "TODO",
-        priority: "",
-        projectId: "",
-        assignedUserId: "",
-      });
+      resetNewTask();
+      setShowCreateModal(false);
     });
   };
 
   const updateTaskStatus = (taskId, newStatus) => {
     axios
-      .patch(
-        `http://localhost:8080/api/tasks/${taskId}/status?status=${newStatus}`,
-      )
-      .then(() => {
-        refreshTasksAndStats();
-      });
+      .patch(`${API_URL}/tasks/${taskId}/status?status=${newStatus}`)
+      .then(refreshTasksAndStats);
   };
 
   const deleteTask = (taskId) => {
@@ -106,9 +124,7 @@ function App() {
 
     if (!confirmed) return;
 
-    axios.delete(`http://localhost:8080/api/tasks/${taskId}`).then(() => {
-      refreshTasksAndStats();
-    });
+    axios.delete(`${API_URL}/tasks/${taskId}`).then(refreshTasksAndStats);
   };
 
   const startEditing = (task) => {
@@ -127,22 +143,18 @@ function App() {
   const updateTask = (e) => {
     e.preventDefault();
 
-    axios
-      .put(`http://localhost:8080/api/tasks/${editingTaskId}`, editTask)
-      .then(() => {
-        refreshTasksAndStats();
-        setEditingTaskId(null);
-      });
+    axios.put(`${API_URL}/tasks/${editingTaskId}`, editTask).then(() => {
+      refreshTasksAndStats();
+      setEditingTaskId(null);
+    });
   };
 
   const openTaskDetails = (task) => {
     setSelectedTask(task);
 
-    axios
-      .get(`http://localhost:8080/api/tasks/${task.id}/comments`)
-      .then((response) => {
-        setComments(response.data);
-      });
+    axios.get(`${API_URL}/tasks/${task.id}/comments`).then((response) => {
+      setComments(response.data);
+    });
   };
 
   const addComment = (e) => {
@@ -154,15 +166,8 @@ function App() {
     }
 
     axios
-      .post(
-        `http://localhost:8080/api/tasks/${selectedTask.id}/comments`,
-        newComment,
-      )
-      .then(() =>
-        axios.get(
-          `http://localhost:8080/api/tasks/${selectedTask.id}/comments`,
-        ),
-      )
+      .post(`${API_URL}/tasks/${selectedTask.id}/comments`, newComment)
+      .then(() => axios.get(`${API_URL}/tasks/${selectedTask.id}/comments`))
       .then((response) => {
         setComments(response.data);
         setNewComment({
@@ -170,6 +175,38 @@ function App() {
           userId: "",
         });
       });
+  };
+  const createProject = (e) => {
+    e.preventDefault();
+
+    if (!newProject.name) {
+      alert("Please enter a project name.");
+      return;
+    }
+
+    axios.post(`${API_URL}/projects`, newProject).then(() => {
+      axios.get(`${API_URL}/projects`).then((response) => {
+        setProjects(response.data);
+        setNewProject({
+          name: "",
+          description: "",
+        });
+      });
+    });
+  };
+
+  const deleteProject = (projectId) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this project?",
+    );
+
+    if (!confirmed) return;
+
+    axios.delete(`${API_URL}/projects/${projectId}`).then(() => {
+      axios.get(`${API_URL}/projects`).then((response) => {
+        setProjects(response.data);
+      });
+    });
   };
 
   const getPriorityClass = (priority) => {
@@ -180,247 +217,396 @@ function App() {
         return "priority-medium";
       case "HIGH":
         return "priority-high";
-      case "CRITICAL":
-        return "priority-critical";
       default:
         return "";
     }
   };
 
-  const todoTasks = tasks.filter((task) => task.status === "TODO");
-  const inProgressTasks = tasks.filter((task) => task.status === "IN_PROGRESS");
-  const doneTasks = tasks.filter((task) => task.status === "DONE");
+  const createUser = (e) => {
+    e.preventDefault();
+
+    axios.post(`${API_URL}/users`, newUser).then(() => {
+      axios.get(`${API_URL}/users`).then((response) => {
+        setUsers(response.data);
+
+        setNewUser({
+          name: "",
+          email: "",
+          role: "DEVELOPER",
+        });
+      });
+    });
+  };
+
+  const filteredTasks = tasks.filter((task) => {
+    const title = task.title?.toLowerCase() || "";
+    const description = task.description?.toLowerCase() || "";
+    const search = searchText.toLowerCase();
+
+    const matchesSearch =
+      title.includes(search) || description.includes(search);
+    const matchesPriority =
+      priorityFilter === "" || task.priority === priorityFilter;
+    const matchesProject =
+      projectFilter === "" || task.project?.id === Number(projectFilter);
+    const matchesUser =
+      userFilter === "" || task.assignedUser?.id === Number(userFilter);
+
+    return matchesSearch && matchesPriority && matchesProject && matchesUser;
+  });
+
+  const todoTasks = filteredTasks.filter((task) => task.status === "TODO");
+  const inProgressTasks = filteredTasks.filter(
+    (task) => task.status === "IN_PROGRESS",
+  );
+  const doneTasks = filteredTasks.filter((task) => task.status === "DONE");
 
   if (!stats) {
-    return <p>Loading dashboard...</p>;
+    return <p className="loading">Loading dashboard...</p>;
   }
 
   return (
     <div className="app">
-      <h1>TaskFlow Dashboard</h1>
-      <p>Mini Jira-style project management system</p>
-
-      <div className="stats-grid">
-        <div className="card">
-          <h2>{stats.totalTasks}</h2>
-          <p>Total Tasks</p>
+      <header className="topbar">
+        <div>
+          <h1>TaskFlow</h1>
+          <p>Mini Project Management System</p>
         </div>
 
-        <div className="card">
-          <h2>{stats.todoTasks}</h2>
-          <p>TODO</p>
+        <div className="topbar-actions">
+          <button
+            className={
+              activePage === "tasks"
+                ? "secondary-btn active-btn"
+                : "secondary-btn"
+            }
+            onClick={() => setActivePage("tasks")}
+          >
+            Tasks
+          </button>
+
+          <button
+            className={
+              activePage === "projects"
+                ? "secondary-btn active-btn"
+                : "secondary-btn"
+            }
+            onClick={() => setActivePage("projects")}
+          >
+            Projects
+          </button>
+
+          <button
+            className={
+              activePage === "users"
+                ? "secondary-btn active-btn"
+                : "secondary-btn"
+            }
+            onClick={() => setActivePage("users")}
+          >
+            Users
+          </button>
+
+          {activePage === "tasks" && (
+            <button
+              className="primary-btn"
+              onClick={() => setShowCreateModal(true)}
+            >
+              + New Task
+            </button>
+          )}
         </div>
+      </header>
 
-        <div className="card">
-          <h2>{stats.inProgressTasks}</h2>
-          <p>In Progress</p>
-        </div>
+      {activePage === "tasks" && (
+        <>
+          <section className="summary-bar">
+            <div className="summary-pill">
+              <span className="value">{stats.totalTasks}</span>
+              <span className="label">Tasks</span>
+            </div>
 
-        <div className="card">
-          <h2>{stats.doneTasks}</h2>
-          <p>Done</p>
-        </div>
+            <div className="summary-pill">
+              <span className="value">{stats.todoTasks}</span>
+              <span className="label">TODO</span>
+            </div>
 
-        <div className="card">
-          <h2>{stats.highPriorityTasks}</h2>
-          <p>High Priority</p>
-        </div>
-      </div>
+            <div className="summary-pill">
+              <span className="value">{stats.inProgressTasks}</span>
+              <span className="label">In Progress</span>
+            </div>
 
-      <h2 className="section-title">Create Task</h2>
+            <div className="summary-pill">
+              <span className="value">{stats.doneTasks}</span>
+              <span className="label">Done</span>
+            </div>
 
-      <form className="task-form" onSubmit={createTask}>
-        <input
-          type="text"
-          placeholder="Task title"
-          value={newTask.title}
-          onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-        />
+            <div className="summary-pill priority">
+              <span className="value">{stats.highPriorityTasks}</span>
+              <span className="label">High Priority</span>
+            </div>
+          </section>
 
-        <input
-          type="text"
-          placeholder="Description"
-          value={newTask.description}
-          onChange={(e) =>
-            setNewTask({ ...newTask, description: e.target.value })
-          }
-        />
+          <section className="filter-bar">
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+            />
 
-        <select
-          value={newTask.projectId}
-          onChange={(e) =>
-            setNewTask({ ...newTask, projectId: Number(e.target.value) })
-          }
-        >
-          <option value="">Select Project</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.name}
-            </option>
-          ))}
-        </select>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+            >
+              <option value="">All Priorities</option>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+            </select>
 
-        <select
-          value={newTask.assignedUserId}
-          onChange={(e) =>
-            setNewTask({
-              ...newTask,
-              assignedUserId: Number(e.target.value),
-            })
-          }
-        >
-          <option value="">Assign User</option>
-          {users.map((user) => (
-            <option key={user.id} value={user.id}>
-              {user.name}
-            </option>
-          ))}
-        </select>
+            <select
+              value={projectFilter}
+              onChange={(e) => setProjectFilter(e.target.value)}
+            >
+              <option value="">All Projects</option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
 
-        <select
-          value={newTask.priority}
-          onChange={(e) => setNewTask({ ...newTask, priority: e.target.value })}
-        >
-          <option value="">Priority</option>
-          <option value="LOW">LOW</option>
-          <option value="MEDIUM">MEDIUM</option>
-          <option value="HIGH">HIGH</option>
-          <option value="CRITICAL">CRITICAL</option>
-        </select>
+            <select
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+            >
+              <option value="">All Users</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
 
-        <button type="submit">Create Task</button>
-      </form>
+            <button
+              type="button"
+              className="secondary-btn"
+              onClick={() => {
+                setSearchText("");
+                setPriorityFilter("");
+                setProjectFilter("");
+                setUserFilter("");
+              }}
+            >
+              Clear
+            </button>
+          </section>
 
-      <h2 className="section-title">Task Board</h2>
+          <main className="kanban-board">
+            <TaskColumn
+              title="TODO"
+              tasks={todoTasks}
+              getPriorityClass={getPriorityClass}
+              updateTaskStatus={updateTaskStatus}
+              startEditing={startEditing}
+              openTaskDetails={openTaskDetails}
+              deleteTask={deleteTask}
+              nextButtonText="Start"
+              nextStatus="IN_PROGRESS"
+            />
 
-      <div className="kanban-board">
-        <TaskColumn
-          title="TODO"
-          tasks={todoTasks}
-          getPriorityClass={getPriorityClass}
-          updateTaskStatus={updateTaskStatus}
-          startEditing={startEditing}
-          openTaskDetails={openTaskDetails}
-          deleteTask={deleteTask}
-          nextButtonText="Start"
-          nextStatus="IN_PROGRESS"
-        />
+            <TaskColumn
+              title="IN PROGRESS"
+              tasks={inProgressTasks}
+              getPriorityClass={getPriorityClass}
+              updateTaskStatus={updateTaskStatus}
+              startEditing={startEditing}
+              openTaskDetails={openTaskDetails}
+              deleteTask={deleteTask}
+              nextButtonText="Mark Done"
+              nextStatus="DONE"
+            />
 
-        <TaskColumn
-          title="IN PROGRESS"
-          tasks={inProgressTasks}
-          getPriorityClass={getPriorityClass}
-          updateTaskStatus={updateTaskStatus}
-          startEditing={startEditing}
-          openTaskDetails={openTaskDetails}
-          deleteTask={deleteTask}
-          nextButtonText="Mark Done"
-          nextStatus="DONE"
-        />
+            <TaskColumn
+              title="DONE"
+              tasks={doneTasks}
+              getPriorityClass={getPriorityClass}
+              updateTaskStatus={updateTaskStatus}
+              startEditing={startEditing}
+              openTaskDetails={openTaskDetails}
+              deleteTask={deleteTask}
+              nextButtonText="Reopen"
+              nextStatus="TODO"
+            />
+          </main>
+        </>
+      )}
 
-        <TaskColumn
-          title="DONE"
-          tasks={doneTasks}
-          getPriorityClass={getPriorityClass}
-          updateTaskStatus={updateTaskStatus}
-          startEditing={startEditing}
-          openTaskDetails={openTaskDetails}
-          deleteTask={deleteTask}
-          nextButtonText="Reopen"
-          nextStatus="TODO"
-        />
-      </div>
+      {activePage === "projects" && (
+        <section className="projects-page">
+          <div className="page-header">
+            <h2>Projects</h2>
+            <p>Manage projects used by your tasks.</p>
+          </div>
 
-      {editingTaskId && (
-        <div className="modal-overlay" onClick={() => setEditingTaskId(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h2>Edit Task</h2>
+          <form className="project-form" onSubmit={createProject}>
+            <input
+              type="text"
+              placeholder="Project name"
+              value={newProject.name}
+              onChange={(e) =>
+                setNewProject({
+                  ...newProject,
+                  name: e.target.value,
+                })
+              }
+            />
 
-            <form onSubmit={updateTask}>
-              <input
-                type="text"
-                value={editTask.title}
-                onChange={(e) =>
-                  setEditTask({ ...editTask, title: e.target.value })
-                }
-              />
+            <input
+              type="text"
+              placeholder="Project description"
+              value={newProject.description}
+              onChange={(e) =>
+                setNewProject({
+                  ...newProject,
+                  description: e.target.value,
+                })
+              }
+            />
 
-              <input
-                type="text"
-                value={editTask.description}
-                onChange={(e) =>
-                  setEditTask({
-                    ...editTask,
-                    description: e.target.value,
-                  })
-                }
-              />
+            <button type="submit">Create Project</button>
+          </form>
 
-              <select
-                value={editTask.projectId}
-                onChange={(e) =>
-                  setEditTask({
-                    ...editTask,
-                    projectId: Number(e.target.value),
-                  })
-                }
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
+          <div className="project-grid">
+            {projects.map((project) => (
+              <div className="project-card" key={project.id}>
+                <h3>{project.name}</h3>
+                <p>{project.description}</p>
 
-              <select
-                value={editTask.assignedUserId}
-                onChange={(e) =>
-                  setEditTask({
-                    ...editTask,
-                    assignedUserId: Number(e.target.value),
-                  })
-                }
-              >
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={editTask.priority}
-                onChange={(e) =>
-                  setEditTask({ ...editTask, priority: e.target.value })
-                }
-              >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="CRITICAL">CRITICAL</option>
-              </select>
-
-              <div className="modal-buttons">
-                <button type="submit">Save Changes</button>
-                <button type="button" onClick={() => setEditingTaskId(null)}>
-                  Cancel
+                <button
+                  className="danger-btn"
+                  onClick={() => deleteProject(project.id)}
+                >
+                  Delete
                 </button>
               </div>
-            </form>
+            ))}
           </div>
-        </div>
+        </section>
+      )}
+
+      {activePage === "users" && (
+        <section className="users-page">
+          <div className="page-header">
+            <h2>Users</h2>
+            <p>Manage team members.</p>
+          </div>
+
+          <form className="project-form" onSubmit={createUser}>
+            <input
+              placeholder="Name"
+              value={newUser.name}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  name: e.target.value,
+                })
+              }
+            />
+
+            <input
+              placeholder="Email"
+              value={newUser.email}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  email: e.target.value,
+                })
+              }
+            />
+
+            <select
+              value={newUser.role}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  role: e.target.value,
+                })
+              }
+            >
+              <option value="DEVELOPER">Developer</option>
+              <option value="MANAGER">Manager</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+
+            <button>Create User</button>
+          </form>
+
+          <div className="project-grid">
+            {users.map((user) => (
+              <div className="project-card" key={user.id}>
+                <h3>{user.name}</h3>
+                <p>{user.email}</p>
+                <p>{user.role}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {showCreateModal && (
+        <TaskFormModal
+          title="Create Task"
+          task={newTask}
+          setTask={setNewTask}
+          projects={projects}
+          users={users}
+          onSubmit={createTask}
+          onClose={() => {
+            setShowCreateModal(false);
+            resetNewTask();
+          }}
+          submitLabel="Create Task"
+        />
+      )}
+
+      {editingTaskId && (
+        <TaskFormModal
+          title="Edit Task"
+          task={editTask}
+          setTask={setEditTask}
+          projects={projects}
+          users={users}
+          onSubmit={updateTask}
+          onClose={() => setEditingTaskId(null)}
+          submitLabel="Save Changes"
+        />
       )}
 
       {selectedTask && (
         <div className="modal-overlay" onClick={() => setSelectedTask(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal details-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
             <h2>{selectedTask.title}</h2>
 
             <p>{selectedTask.description}</p>
-            <p>Project: {selectedTask.project?.name}</p>
-            <p>Assigned: {selectedTask.assignedUser?.name}</p>
-            <p>Priority: {selectedTask.priority}</p>
-            <p>Status: {selectedTask.status}</p>
+
+            <div className="details-grid">
+              <span>Project</span>
+              <strong>{selectedTask.project?.name}</strong>
+
+              <span>Assigned</span>
+              <strong>{selectedTask.assignedUser?.name}</strong>
+
+              <span>Priority</span>
+              <strong>{selectedTask.priority}</strong>
+
+              <span>Status</span>
+              <strong>{selectedTask.status}</strong>
+            </div>
 
             <h3>Comments</h3>
 
@@ -467,10 +653,95 @@ function App() {
               <button type="submit">Add Comment</button>
             </form>
 
-            <button onClick={() => setSelectedTask(null)}>Close</button>
+            <button
+              className="secondary-btn"
+              onClick={() => setSelectedTask(null)}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TaskFormModal({
+  title,
+  task,
+  setTask,
+  projects,
+  users,
+  onSubmit,
+  onClose,
+  submitLabel,
+}) {
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>{title}</h2>
+
+        <form onSubmit={onSubmit}>
+          <input
+            type="text"
+            placeholder="Task title"
+            value={task.title}
+            onChange={(e) => setTask({ ...task, title: e.target.value })}
+          />
+
+          <input
+            type="text"
+            placeholder="Description"
+            value={task.description}
+            onChange={(e) => setTask({ ...task, description: e.target.value })}
+          />
+
+          <select
+            value={task.projectId}
+            onChange={(e) =>
+              setTask({ ...task, projectId: Number(e.target.value) })
+            }
+          >
+            <option value="">Select Project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={task.assignedUserId}
+            onChange={(e) =>
+              setTask({ ...task, assignedUserId: Number(e.target.value) })
+            }
+          >
+            <option value="">Assign User</option>
+            {users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={task.priority}
+            onChange={(e) => setTask({ ...task, priority: e.target.value })}
+          >
+            <option value="">Priority</option>
+            <option value="LOW">LOW</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="HIGH">HIGH</option>
+          </select>
+
+          <div className="modal-buttons">
+            <button type="submit">{submitLabel}</button>
+            <button type="button" className="secondary-btn" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -487,33 +758,61 @@ function TaskColumn({
   nextStatus,
 }) {
   return (
-    <div className="column">
-      <h2>
-        {title} ({tasks.length})
-      </h2>
+    <section className="column">
+      <div className="column-header">
+        <h2>{title}</h2>
+        <span>{tasks.length}</span>
+      </div>
 
-      {tasks.map((task) => (
-        <div className="task-card" key={task.id}>
-          <h3>{task.title}</h3>
-          <p>{task.description}</p>
-          <p>Project: {task.project?.name}</p>
-          <p className={getPriorityClass(task.priority)}>{task.priority}</p>
-          <p>Assigned: {task.assignedUser?.name}</p>
+      {tasks.length === 0 ? (
+        <p className="empty-text">No tasks</p>
+      ) : (
+        tasks.map((task) => (
+          <div className="task-card" key={task.id}>
+            <div className="task-card-header">
+              <h3>{task.title}</h3>
+              <span className={getPriorityClass(task.priority)}>
+                {task.priority}
+              </span>
+            </div>
 
-          <button onClick={() => updateTaskStatus(task.id, nextStatus)}>
-            {nextButtonText}
-          </button>
+            <p>{task.description}</p>
 
-          <button onClick={() => startEditing(task)}>Edit</button>
+            <div className="task-meta">
+              <span>{task.project?.name}</span>
+              <span>{task.assignedUser?.name}</span>
+            </div>
 
-          <button onClick={() => openTaskDetails(task)}>View Details</button>
+            <div className="task-actions">
+              <button onClick={() => updateTaskStatus(task.id, nextStatus)}>
+                {nextButtonText}
+              </button>
 
-          <button className="delete-btn" onClick={() => deleteTask(task.id)}>
-            Delete
-          </button>
-        </div>
-      ))}
-    </div>
+              <button
+                className="secondary-btn"
+                onClick={() => startEditing(task)}
+              >
+                Edit
+              </button>
+
+              <button
+                className="secondary-btn"
+                onClick={() => openTaskDetails(task)}
+              >
+                Details
+              </button>
+
+              <button
+                className="danger-btn"
+                onClick={() => deleteTask(task.id)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))
+      )}
+    </section>
   );
 }
 
