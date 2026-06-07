@@ -15,8 +15,8 @@ public class CorsConfig {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/api/**")
                         .allowedOrigins("http://localhost:5173",
-                                "frontend-production-723c.up.railway.app",
-                                "taskflow-production-4131.up.railway.app")
+                                "https://frontend-production-723c.up.railway.app",
+                                "https://taskflow-production-4131.up.railway.app")
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("*");
             }
