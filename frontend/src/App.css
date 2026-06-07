@@ -54,10 +54,6 @@ h1 {
   margin-top: 10px;
 }
 
-.task-card p {
-  color: darkgray;
-}
-
 .task-card h3 {
   margin-top: 0;
   color: black;
@@ -101,4 +97,48 @@ button {
 
 button:hover {
   background: #374151;
+}
+
+.task-form {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0 32px;
+  padding: 20px;
+  background: white;
+  border-radius: 12px;
+}
+
+.task-form input,
+.task-form select {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.task-form button {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.section-title {
+  margin-top: 32px;
+}
+
+.priority-low {
+  color: green;
+}
+
+.priority-medium {
+  color: orange;
+}
+
+.priority-high {
+  color: red;
+}
+
+.priority-critical {
+  color: darkred;
+  font-weight: bold;
 }
